@@ -38,6 +38,61 @@ docker compose up --build
 
 ---
 
+## Despliegue en Fly.io
+
+El repositorio ya incluye `fly.toml` y `Dockerfile`, listos para desplegar.
+
+### 1) Instalar CLI y autenticarse
+
+```bash
+# macOS/Linux (opción oficial)
+curl -L https://fly.io/install.sh | sh
+
+# login
+fly auth login
+```
+
+### 2) Crear la app (si no existe)
+
+```bash
+fly apps create api-ludusacademia
+```
+
+Si quieres otro nombre, cámbialo también en `fly.toml` (`app = "..."`).
+
+### 3) Crear volumen persistente para SQLite
+
+SQLite necesita disco persistente para no perder datos entre reinicios.
+
+```bash
+fly volumes create sqlite_data --size 1 --region mia
+```
+
+El volumen coincide con el `source` definido en `fly.toml` y se monta en `/data`.
+
+### 4) Configurar secretos
+
+```bash
+fly secrets set \
+  SUPABASE_URL="https://TU-PROYECTO.supabase.co" \
+  SUPABASE_JWT_SECRET="TU_SUPABASE_JWT_SECRET"
+```
+
+### 5) Desplegar
+
+```bash
+fly deploy
+```
+
+### 6) Verificar salud
+
+```bash
+fly status
+fly logs
+```
+
+Health check configurado: `GET /v1/health`.
+
 ## Endpoints
 
 | Método | Ruta | Auth | Descripción |
