@@ -116,16 +116,40 @@ concurrentes mientras hay un write en curso.
 Si el proyecto escala a cientos de grupos simultáneos, el cambio a PostgreSQL
 requiere solo modificar `DATABASE_URL` en `.env` — el resto del código es idéntico.
 
+## Seed en producción
+
+Al arrancar en `APP_ENV=production`, la API ejecuta un seed idempotente si
+encuentra `SUPABASE_SEED_UID`.
+
+Ese seed crea o reutiliza:
+- Docente `maestro@test.com` con el `supabase_uid` configurado
+- Grupo `1` asignado a ese docente
+- Un alumno de ejemplo vinculado al grupo
+- Eventos de analítica de prueba
+- Un código de vinculación de ejemplo
+
+Para Render, define estas variables de entorno:
+
+```bash
+SUPABASE_SEED_UID=83c79385-b2dc-47ac-82eb-ffcb92450c1a
+SUPABASE_SEED_EMAIL=maestro@test.com
+APP_ENV=production
+```
+
+Si necesitas poblar una base local manualmente, también puedes ejecutar:
+
+```bash
+python scripts/seed_db.py
+```
+
 ## Datos de prueba en producción
 
-Si necesitas un despliegue con contenido inicial para probar el flujo sin crear
-datos manualmente, activa `SEED_SAMPLE_DATA=true`. La API cargará un docente,
-un grupo, un alumno, un código de vinculación y un evento de ejemplo, pero solo
-si la base está vacía.
+El seed de arranque es idempotente y se activa en producción cuando existe
+`SUPABASE_SEED_UID`. No crea duplicados si la API se reinicia varias veces.
 
 Valores por defecto del seed:
 - Docente: `maestro@test.com`
-- Grupo: `Grupo Demo`
+- Grupo: `Grupo 1`
 - Código: `LUDUDE`
 
 ---

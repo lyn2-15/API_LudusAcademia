@@ -12,8 +12,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
-from app.core.security import get_optional_supabase_uid, verify_supabase_token
+from app.core.security import get_supabase_uid, verify_supabase_token
 from app.db.session import get_db
 from app.schemas.schemas import (
     AnaliticaGrupoResponse,
@@ -22,12 +21,10 @@ from app.schemas.schemas import (
 )
 from app.services.docente_service import DocenteService
 
-settings = get_settings()
-
 router = APIRouter(
     prefix="/docentes",
     tags=["📊 Docentes"],
-    dependencies=[] if settings.ALLOW_PUBLIC_DOCENTE_ENDPOINTS else [Depends(verify_supabase_token)],
+    dependencies=[Depends(verify_supabase_token)],  # JWT obligatorio en todos
 )
 service = DocenteService()
 
@@ -52,7 +49,7 @@ service = DocenteService()
 async def generar_codigo(
     payload: GenerarCodigoRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    supabase_uid: Annotated[str | None, Depends(get_optional_supabase_uid)],
+    supabase_uid: Annotated[str, Depends(get_supabase_uid)],
 ) -> GenerarCodigoResponse:
     return await service.generar_codigo(db, supabase_uid, payload)
 
@@ -75,7 +72,7 @@ async def generar_codigo(
 async def analitica_grupo(
     id_grupo: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    supabase_uid: Annotated[str | None, Depends(get_optional_supabase_uid)],
+    supabase_uid: Annotated[str, Depends(get_supabase_uid)],
     metrica: Literal["errores", "progreso"] | None = Query(
         None, description="Ordena los alumnos por esta métrica."
     ),
@@ -97,7 +94,7 @@ async def analitica_grupo(
 async def reporte_pdf(
     uuid_estudiante: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    supabase_uid: Annotated[str | None, Depends(get_optional_supabase_uid)],
+    supabase_uid: Annotated[str, Depends(get_supabase_uid)],
 ):
     from app.db.models import Estudiante, Grupo, Docente
     from app.services.docente_service import DocenteService
@@ -105,6 +102,7 @@ async def reporte_pdf(
     from sqlalchemy import select
 
     docente_svc = DocenteService()
+    docente = await docente_svc.obtener_o_crear_docente(db, supabase_uid)
 
     # Cargar alumno y verificar pertenencia al grupo del docente (RLS)
     estudiante = await db.get(Estudiante, uuid_estudiante)
@@ -112,13 +110,8 @@ async def reporte_pdf(
         raise HTTPException(status_code=404, detail="Alumno no encontrado.")
 
     grupo = await db.get(Grupo, estudiante.id_grupo)
-    if not grupo:
-        raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-
-    if not settings.ALLOW_PUBLIC_DOCENTE_ENDPOINTS:
-        docente = await docente_svc.obtener_o_crear_docente(db, supabase_uid or "")
-        if grupo.id_docente != docente.id:
-            raise HTTPException(status_code=403, detail="No tienes acceso a este alumno.")
+    if not grupo or grupo.id_docente != docente.id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este alumno.")
 
     # Generar PDF
     from app.services.reporte_service import ReporteService

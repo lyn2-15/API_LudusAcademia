@@ -50,7 +50,7 @@ class DocenteService:
     # ── Códigos de vinculación ────────────────────────────────────────────────
 
     async def generar_codigo(
-        self, db: AsyncSession, supabase_uid: str | None, payload: GenerarCodigoRequest
+        self, db: AsyncSession, supabase_uid: str, payload: GenerarCodigoRequest
     ) -> GenerarCodigoResponse:
         """
         Genera un código LUDUXX para que nuevos alumnos entren al grupo.
@@ -59,22 +59,16 @@ class DocenteService:
         El código expira en `horas_validez` horas (default 24h).
         Reintenta si el código ya existe (colisión rara pero posible).
         """
+        docente = await self.obtener_o_crear_docente(db, supabase_uid)
+
+        # RLS: el grupo debe pertenecer a este docente
         grupo = await db.get(Grupo, payload.id_grupo)
-        if not grupo:
+        if not grupo or grupo.id_docente != docente.id:
             from fastapi import HTTPException, status
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Grupo no encontrado.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para generar códigos en este grupo.",
             )
-
-        if not settings.ALLOW_PUBLIC_DOCENTE_ENDPOINTS:
-            docente = await self.obtener_o_crear_docente(db, supabase_uid or "")
-            if grupo.id_docente != docente.id:
-                from fastapi import HTTPException, status
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes permisos para generar códigos en este grupo.",
-                )
 
         expira = datetime.now(timezone.utc) + timedelta(hours=payload.horas_validez)
 
@@ -101,7 +95,7 @@ class DocenteService:
     # ── Analítica ─────────────────────────────────────────────────────────────
 
     async def analitica_grupo(
-        self, db: AsyncSession, supabase_uid: str | None, id_grupo: int, metrica: str | None
+        self, db: AsyncSession, supabase_uid: str, id_grupo: int, metrica: str | None
     ) -> AnaliticaGrupoResponse:
         """
         Devuelve métricas pedagógicas del grupo para el dashboard.
@@ -110,22 +104,15 @@ class DocenteService:
         RLS: el docente solo puede consultar sus propios grupos.
         Los alumnos aparecen como alias, nunca con nombre real.
         """
+        docente = await self.obtener_o_crear_docente(db, supabase_uid)
+
         grupo = await db.get(Grupo, id_grupo)
-        if not grupo:
+        if not grupo or grupo.id_docente != docente.id:
             from fastapi import HTTPException, status
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Grupo no encontrado.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para consultar este grupo.",
             )
-
-        if not settings.ALLOW_PUBLIC_DOCENTE_ENDPOINTS:
-            docente = await self.obtener_o_crear_docente(db, supabase_uid or "")
-            if grupo.id_docente != docente.id:
-                from fastapi import HTTPException, status
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes permisos para consultar este grupo.",
-                )
 
         # Obtener alumnos del grupo
         result = await db.execute(
