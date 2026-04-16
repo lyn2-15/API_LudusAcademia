@@ -116,6 +116,18 @@ concurrentes mientras hay un write en curso.
 Si el proyecto escala a cientos de grupos simultáneos, el cambio a PostgreSQL
 requiere solo modificar `DATABASE_URL` en `.env` — el resto del código es idéntico.
 
+## Datos de prueba en producción
+
+Si necesitas un despliegue con contenido inicial para probar el flujo sin crear
+datos manualmente, activa `SEED_SAMPLE_DATA=true`. La API cargará un docente,
+un grupo, un alumno, un código de vinculación y un evento de ejemplo, pero solo
+si la base está vacía.
+
+Valores por defecto del seed:
+- Docente: `maestro@test.com`
+- Grupo: `Grupo Demo`
+- Código: `LUDUDE`
+
 ---
 
 ## Tests

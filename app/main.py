@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.db.seed import seed_sample_data
 from app.db.session import init_db
 
 settings = get_settings()
@@ -18,6 +19,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()   # Crea tablas + activa WAL mode
+    await seed_sample_data()
     yield
 
 

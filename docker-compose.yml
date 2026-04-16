@@ -13,6 +13,7 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       ALLOWED_ORIGINS: '["http://localhost:3000"]'
       ALLOW_PUBLIC_DOCENTE_ENDPOINTS: "true"
+        SEED_SAMPLE_DATA: "true"
     ports:
       - "8000:8000"
     volumes:
