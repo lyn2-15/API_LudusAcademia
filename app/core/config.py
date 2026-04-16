@@ -1,7 +1,7 @@
 """
 app/core/config.py
 Configuración central de LudusAcademia v2.
-Claves de Supabase para validar los tokens del panel docente sin mantener usuarios propios.
+Clave pública de Supabase para validar tokens ES256 del panel docente.
 """
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,8 +17,7 @@ class Settings(BaseSettings):
 
     # Supabase Auth
     SUPABASE_URL: str
-    SUPABASE_JWT_SECRET: str
-    SUPABASE_JWT_PUBLIC_KEY: str | None = None
+    SUPABASE_JWT_PUBLIC_KEY: str
 
     # Comportamiento
     MAX_SYNC_PAYLOAD_KB: int = 50
