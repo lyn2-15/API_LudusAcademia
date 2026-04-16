@@ -2,14 +2,14 @@
 app/services/docente_service.py
 Lógica de negocio para docentes:
   - Generación de códigos LUDUXX con expiración
-    - Analítica del grupo sin validación de identidad para pruebas
+    - Analítica del grupo con control de pertenencia al docente
 """
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CodigoVinculacion, Estudiante, EventoAprendizaje, Grupo
+from app.db.models import CodigoVinculacion, Docente, Estudiante, EventoAprendizaje, Grupo
 from app.schemas.schemas import (
     AnaliticaGrupoResponse,
     GenerarCodigoRequest,
@@ -20,10 +20,32 @@ from app.services.estudiante_service import generar_codigo_ludu
 
 
 class DocenteService:
+    async def obtener_o_crear_docente(
+        self, db: AsyncSession, supabase_uid: str, correo: str = ""
+    ) -> Docente:
+        """
+        Obtiene el registro del docente por su supabase_uid.
+        Si no existe, lo crea para mantener la relación con sus grupos.
+        """
+        result = await db.execute(
+            select(Docente).where(Docente.supabase_uid == supabase_uid)
+        )
+        docente = result.scalar_one_or_none()
+
+        if not docente:
+            docente = Docente(
+                supabase_uid=supabase_uid,
+                correo=correo or supabase_uid,
+            )
+            db.add(docente)
+            await db.flush()
+
+        return docente
+
     # ── Códigos de vinculación ────────────────────────────────────────────────
 
     async def generar_codigo(
-        self, db: AsyncSession, payload: GenerarCodigoRequest
+        self, db: AsyncSession, supabase_uid: str, payload: GenerarCodigoRequest
     ) -> GenerarCodigoResponse:
         """
         Genera un código LUDUXX para que nuevos alumnos entren al grupo.
@@ -31,13 +53,15 @@ class DocenteService:
         El código expira en `horas_validez` horas (default 24h).
         Reintenta si el código ya existe (colisión rara pero posible).
         """
-        # Solo validar que el grupo exista para permitir pruebas sin auth.
+        docente = await self.obtener_o_crear_docente(db, supabase_uid)
+
+        # Validar pertenencia del grupo al docente autenticado.
         grupo = await db.get(Grupo, payload.id_grupo)
-        if not grupo:
+        if not grupo or grupo.id_docente != docente.id:
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="El grupo no existe.",
+                detail="No tienes permisos para generar códigos en este grupo.",
             )
 
         expira = datetime.now(timezone.utc) + timedelta(hours=payload.horas_validez)
@@ -65,7 +89,7 @@ class DocenteService:
     # ── Analítica ─────────────────────────────────────────────────────────────
 
     async def analitica_grupo(
-        self, db: AsyncSession, id_grupo: int, metrica: str | None
+        self, db: AsyncSession, supabase_uid: str, id_grupo: int, metrica: str | None
     ) -> AnaliticaGrupoResponse:
         """
         Devuelve métricas pedagógicas del grupo para el dashboard.
@@ -73,12 +97,14 @@ class DocenteService:
 
         Los alumnos aparecen como alias, nunca con nombre real.
         """
+        docente = await self.obtener_o_crear_docente(db, supabase_uid)
+
         grupo = await db.get(Grupo, id_grupo)
-        if not grupo:
+        if not grupo or grupo.id_docente != docente.id:
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="El grupo no existe.",
+                detail="No tienes permisos para consultar este grupo.",
             )
 
         # Obtener alumnos del grupo
