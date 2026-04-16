@@ -4,7 +4,7 @@ Validación del JWT emitido por Supabase Auth.
 
 Diferencia clave con v1: ya no generamos tokens propios.
 FastAPI actúa como "Resource Server" — confía en el JWT de Supabase
-verificando su firma con clave pública (ES256).
+verificando su firma con SUPABASE_JWT_SECRET (HMAC-SHA256).
 
 El payload del JWT de Supabase incluye:
   - sub: UUID del docente en Supabase
@@ -34,15 +34,15 @@ def verify_supabase_token(
     Dependencia FastAPI: extrae y valida el Bearer JWT de Supabase.
     Devuelve el payload completo (incluye 'sub' = supabase_uid del docente).
 
-    Solo se aceptan tokens firmados con ES256.
+    Supabase firma con HS256 usando el JWT Secret del proyecto.
     No hay llamada HTTP a Supabase — la validación es local y rápida.
     """
     token = credentials.credentials
     try:
         payload = jwt.decode(
             token,
-            settings.SUPABASE_JWT_PUBLIC_KEY,
-            algorithms=["ES256"],
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
             options={"verify_aud": False},  # Supabase no usa 'aud' por defecto
         )
         return payload

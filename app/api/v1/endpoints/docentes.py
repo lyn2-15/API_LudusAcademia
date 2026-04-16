@@ -1,6 +1,6 @@
 """
 app/api/v1/endpoints/docentes.py
-Endpoints del docente — protegidos con JWT de Supabase.
+Endpoints del docente — todos requieren JWT de Supabase.
 
 POST /docentes/codigos                      — genera código LUDUXX
 GET  /docentes/analitica/grupo/{id_grupo}   — métricas del grupo
@@ -21,7 +21,11 @@ from app.schemas.schemas import (
 )
 from app.services.docente_service import DocenteService
 
-router = APIRouter(prefix="/docentes", tags=["📊 Docentes"])
+router = APIRouter(
+    prefix="/docentes",
+    tags=["📊 Docentes"],
+    dependencies=[Depends(verify_supabase_token)],  # JWT obligatorio en todos
+)
 service = DocenteService()
 
 
@@ -34,14 +38,13 @@ service = DocenteService()
         "Genera un código alfanumérico de 6 caracteres (ej. `LUDU42`) "
         "para que nuevos alumnos se unan al grupo. "
         "El código expira según `horas_validez` (default: 24h). "
-        "Requiere JWT de Supabase."
+        "**RLS**: solo puedes generar códigos para tus propios grupos."
     ),
     responses={
         201: {"description": "Código generado."},
         401: {"description": "JWT inválido o expirado."},
-        403: {"description": "No tienes permisos para este grupo."},
+        403: {"description": "El grupo no te pertenece."},
     },
-    dependencies=[Depends(verify_supabase_token)],
 )
 async def generar_codigo(
     payload: GenerarCodigoRequest,
@@ -59,14 +62,12 @@ async def generar_codigo(
         "Devuelve métricas pedagógicas de todos los alumnos del grupo. "
         "Usa el parámetro `?metrica=errores` o `?metrica=progreso` para ordenar. "
         "Los alumnos aparecen con alias — nunca con nombre real. "
-        "Requiere JWT de Supabase."
+        "**RLS**: el JWT solo da acceso a tus grupos."
     ),
     responses={
         200: {"description": "Métricas del grupo."},
-        401: {"description": "JWT inválido o expirado."},
         403: {"description": "No tienes permisos para consultar este grupo."},
     },
-    dependencies=[Depends(verify_supabase_token)],
 )
 async def analitica_grupo(
     id_grupo: int,
@@ -85,11 +86,10 @@ async def analitica_grupo(
     description=(
         "Genera un PDF de progreso individual. "
         "El reporte usa el alias o UUID del alumno — nunca su nombre real. "
-        "Requiere JWT de Supabase."
+        "**RLS**: el alumno debe pertenecer a uno de tus grupos."
     ),
     response_class=Response,
     responses={200: {"content": {"application/pdf": {}}}},
-    dependencies=[Depends(verify_supabase_token)],
 )
 async def reporte_pdf(
     uuid_estudiante: str,

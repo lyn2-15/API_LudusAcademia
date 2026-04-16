@@ -2,13 +2,14 @@
 app/services/docente_service.py
 Lógica de negocio para docentes:
   - Generación de códigos LUDUXX con expiración
-    - Analítica del grupo con control de pertenencia al docente
+    - Analítica del grupo con RLS: el docente solo ve sus grupos
 """
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.models import CodigoVinculacion, Docente, Estudiante, EventoAprendizaje, Grupo
 from app.schemas.schemas import (
     AnaliticaGrupoResponse,
@@ -18,6 +19,8 @@ from app.schemas.schemas import (
 )
 from app.services.estudiante_service import generar_codigo_ludu
 
+settings = get_settings()
+
 
 class DocenteService:
     async def obtener_o_crear_docente(
@@ -25,7 +28,8 @@ class DocenteService:
     ) -> Docente:
         """
         Obtiene el registro del docente por su supabase_uid.
-        Si no existe, lo crea para mantener la relación con sus grupos.
+        Si es la primera vez que se autentica, crea su perfil automáticamente.
+        Así no necesitamos un endpoint de registro separado.
         """
         result = await db.execute(
             select(Docente).where(Docente.supabase_uid == supabase_uid)
@@ -35,7 +39,7 @@ class DocenteService:
         if not docente:
             docente = Docente(
                 supabase_uid=supabase_uid,
-                correo=correo or supabase_uid,
+                correo=correo,
             )
             db.add(docente)
             await db.flush()
@@ -50,12 +54,13 @@ class DocenteService:
         """
         Genera un código LUDUXX para que nuevos alumnos entren al grupo.
 
+        RLS: verifica que el grupo pertenezca al docente autenticado.
         El código expira en `horas_validez` horas (default 24h).
         Reintenta si el código ya existe (colisión rara pero posible).
         """
         docente = await self.obtener_o_crear_docente(db, supabase_uid)
 
-        # Validar pertenencia del grupo al docente autenticado.
+        # RLS: el grupo debe pertenecer a este docente
         grupo = await db.get(Grupo, payload.id_grupo)
         if not grupo or grupo.id_docente != docente.id:
             from fastapi import HTTPException, status
@@ -95,6 +100,7 @@ class DocenteService:
         Devuelve métricas pedagógicas del grupo para el dashboard.
         Soporta filtro por ?metrica=errores o ?metrica=progreso.
 
+        RLS: el docente solo puede consultar sus propios grupos.
         Los alumnos aparecen como alias, nunca con nombre real.
         """
         docente = await self.obtener_o_crear_docente(db, supabase_uid)
