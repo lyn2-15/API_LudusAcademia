@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Comportamiento
     MAX_SYNC_PAYLOAD_KB: int = 50
     INVITE_CODE_EXPIRY_HOURS: int = 24
+    ALLOW_PUBLIC_DOCENTE_ENDPOINTS: bool = False
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]

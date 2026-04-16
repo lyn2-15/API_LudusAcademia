@@ -12,6 +12,7 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       ALLOWED_ORIGINS: '["http://localhost:3000"]'
+      ALLOW_PUBLIC_DOCENTE_ENDPOINTS: "true"
     ports:
       - "8000:8000"
     volumes:
