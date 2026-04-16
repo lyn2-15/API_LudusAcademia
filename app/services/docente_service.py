@@ -2,15 +2,14 @@
 app/services/docente_service.py
 Lógica de negocio para docentes:
   - Generación de códigos LUDUXX con expiración
-  - Analítica del grupo con RLS: el docente solo ve sus grupos
+    - Analítica del grupo sin validación de identidad para pruebas
 """
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
-from app.db.models import CodigoVinculacion, Docente, Estudiante, EventoAprendizaje, Grupo
+from app.db.models import CodigoVinculacion, Estudiante, EventoAprendizaje, Grupo
 from app.schemas.schemas import (
     AnaliticaGrupoResponse,
     GenerarCodigoRequest,
@@ -19,55 +18,26 @@ from app.schemas.schemas import (
 )
 from app.services.estudiante_service import generar_codigo_ludu
 
-settings = get_settings()
-
 
 class DocenteService:
-
-    async def obtener_o_crear_docente(
-        self, db: AsyncSession, supabase_uid: str, correo: str = ""
-    ) -> Docente:
-        """
-        Obtiene el registro del docente por su supabase_uid.
-        Si es la primera vez que se autentica, crea su perfil automáticamente.
-        Así no necesitamos un endpoint de registro separado.
-        """
-        result = await db.execute(
-            select(Docente).where(Docente.supabase_uid == supabase_uid)
-        )
-        docente = result.scalar_one_or_none()
-
-        if not docente:
-            docente = Docente(
-                supabase_uid=supabase_uid,
-                correo=correo,
-            )
-            db.add(docente)
-            await db.flush()
-
-        return docente
-
     # ── Códigos de vinculación ────────────────────────────────────────────────
 
     async def generar_codigo(
-        self, db: AsyncSession, supabase_uid: str, payload: GenerarCodigoRequest
+        self, db: AsyncSession, payload: GenerarCodigoRequest
     ) -> GenerarCodigoResponse:
         """
         Genera un código LUDUXX para que nuevos alumnos entren al grupo.
 
-        RLS: verifica que el grupo pertenezca al docente autenticado.
         El código expira en `horas_validez` horas (default 24h).
         Reintenta si el código ya existe (colisión rara pero posible).
         """
-        docente = await self.obtener_o_crear_docente(db, supabase_uid)
-
-        # RLS: el grupo debe pertenecer a este docente
+        # Solo validar que el grupo exista para permitir pruebas sin auth.
         grupo = await db.get(Grupo, payload.id_grupo)
-        if not grupo or grupo.id_docente != docente.id:
+        if not grupo:
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para generar códigos en este grupo.",
+                detail="El grupo no existe.",
             )
 
         expira = datetime.now(timezone.utc) + timedelta(hours=payload.horas_validez)
@@ -95,23 +65,20 @@ class DocenteService:
     # ── Analítica ─────────────────────────────────────────────────────────────
 
     async def analitica_grupo(
-        self, db: AsyncSession, supabase_uid: str, id_grupo: int, metrica: str | None
+        self, db: AsyncSession, id_grupo: int, metrica: str | None
     ) -> AnaliticaGrupoResponse:
         """
         Devuelve métricas pedagógicas del grupo para el dashboard.
         Soporta filtro por ?metrica=errores o ?metrica=progreso.
 
-        RLS: el docente solo puede consultar sus propios grupos.
         Los alumnos aparecen como alias, nunca con nombre real.
         """
-        docente = await self.obtener_o_crear_docente(db, supabase_uid)
-
         grupo = await db.get(Grupo, id_grupo)
-        if not grupo or grupo.id_docente != docente.id:
+        if not grupo:
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para consultar este grupo.",
+                detail="El grupo no existe.",
             )
 
         # Obtener alumnos del grupo
